@@ -94,23 +94,84 @@ leakage unless lagged.
 
 ## PREDISPATCH tables — the forecast side
 
-Same columns, but with **two time axes**, which is what makes them usable as features:
+**These are the tables that matter.** Everything in them was published *before* the interval
+cleared, so the input/output test above doesn't apply — it's answered by construction. After
+the leakage audit, `DISPATCHREGIONSUM` leaves you roughly five usable columns; nearly all
+legitimate features come from here instead.
+
+They also contain AEMO's own price forecast, which is the **benchmark**. NEMCast has to beat it.
+
+### The time axes
 
 | Column | Meaning |
 |---|---|
-| `PREDISPATCH_RUN_DATETIME` | When the forecast was **made**. Note: run identity, not publication time — files land a few minutes later. |
 | `DATETIME` | The interval being **forecast** |
-| `PREDISPATCHSEQNO` | Run identifier |
+| `PREDISPATCH_RUN_DATETIME` | Run label. **Not** when the run executed — it's the first interval the run covers. A run labelled 04:30 was written slightly before 04:30. |
+| `RUN_WRITTEN_AT` | `LASTCHANGED` from the raw file: when the record was actually written. Closer to true publication time. **Null for Jan 2023 – Jul 2024**, which came via nemseer and lacks it. |
+| `PREDISPATCHSEQNO` | Run identifier, format `YYYYMMDDRR`. Not kept in our extract. |
 
-Each target interval appears ~40 times, once per run, out to ~40 hours ahead.
-Resolution is **30-minute**, not 5-minute.
+Pre-dispatch runs **every 30 minutes**, forecasting out to ~40 hours. So each target interval
+appears in roughly 40 rows — one per run — each with better information than the last.
 
-`PREDISPATCHREGIONSUM` splits the renewable forecast, which the dispatch table doesn't:
+Resolution is **30-minute**, not 5-minute. Compare against the mean of six dispatch intervals,
+not a single one.
 
-| Column | Why it matters |
+### Selecting a vintage
+
+The bid deadline is 12:30 for the trading day starting 04:05 tomorrow. So the forecast a
+participant had when bidding is:
+
+```python
+# last run at or before 12:30 today, covering tomorrow's trading day
+run = df[df.PREDISPATCH_RUN_DATETIME <= today_1230].PREDISPATCH_RUN_DATETIME.max()
+tomorrow = df[(df.PREDISPATCH_RUN_DATETIME == run) &
+              (df.DATETIME >= tomorrow_0405) &
+              (df.DATETIME <= day_after_0400)]
+```
+
+Using any later run is leakage. Using an earlier one just throws away information.
+
+### PREDISPATCHPRICE — columns kept
+
+| Column | Meaning |
 |---|---|
-| `SS_SOLAR_UIGF` | Predictable — astronomical shape, cloud is the only uncertainty. Zero at night. |
-| `SS_WIND_UIGF` | Volatile — can collapse at any hour. Nearly all forecast error lives here. |
+| `RRP` | **AEMO's forecast price.** Both a feature and the benchmark. Using it as a feature means you're really modelling AEMO's forecast *error* — legitimate, but be explicit about it. |
+| `INTERVENTION` | Filtered to 0 (pricing run) |
+
+Dropped from the raw table (29 columns): the 8 FCAS price forecasts, `EEP`, and
+`RRP1`–`RRP8` / `EEP1`–`EEP8`. Those numbered pairs are **demand-scenario sensitivities** —
+the price under alternative demand assumptions. Potentially interesting as an uncertainty
+measure; not used here.
+
+### PREDISPATCHREGIONSUM — columns kept
+
+| Column | Meaning |
+|---|---|
+| `TOTALDEMAND` | **Forecast demand, as a level.** This is the real demand forecast — not the ±13 MW delta that `DISPATCHREGIONSUM.DEMANDFORECAST` turned out to be. Usually the strongest single feature in price forecasting. |
+| `AVAILABLEGENERATION` | Forecast generation availability from bids |
+| `AVAILABLELOAD` | Forecast load bids — batteries and pumped hydro. The floor under negative prices. |
+| `UIGF` | Combined wind + solar forecast |
+| `SS_SOLAR_UIGF` | **Solar alone.** Predictable — astronomical shape, cloud is the only real uncertainty. Zero at night. |
+| `SS_WIND_UIGF` | **Wind alone.** Volatile, can collapse at any hour. Nearly all renewable forecast error lives here. |
+
+Use the split rather than combined `UIGF`: at 18:30 in February, solar is a known zero while
+wind is the entire uncertainty. Averaging them together destroys that.
+
+Dropped (105 columns): FCAS requirements and prices, violation flags, actual-availability
+figures, interconnector import limits, WDR fields, and the deprecated `LORSURPLUS` /
+`LRCSURPLUS`.
+
+### Derived features worth building
+
+From one run's forecast of one day:
+
+- `max(RRP)` — AEMO's own spike call, the benchmark
+- `count(RRP > 300)` — how many intervals it expects above the cap strike
+- `min(SS_WIND_UIGF)` — worst forecast wind hour
+- `max(TOTALDEMAND)` — forecast peak
+- `min(AVAILABLEGENERATION − TOTALDEMAND)` — tightest forecast margin
+- **Forecast revision**: change in `max(RRP)` between the 06:30 and 12:30 runs. A forecast
+  moving sharply upward through the morning is itself a signal.
 
 ---
 
