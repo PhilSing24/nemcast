@@ -1,0 +1,6 @@
+base_url: "https://www.aemo.com.au/aemo/data/nem/priceanddemand/PRICE_AND_DEMAND_{ym}_{region}.csv"
+regions: [NSW1, QLD1, VIC1, SA1, TAS1]
+start: "2023-01"
+end: "2026-08"
+raw_dir: "data/raw"
+request_delay: 1.0
