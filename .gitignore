@@ -1,8 +1,10 @@
 .venv/
-data/
+data/*
 __pycache__/
 *.pyc
 .ipynb_checkpoints/
 docs/*.pdf
 docs/*.xlsx
 .vscode/
+!data/reference/
+!data/reference/*

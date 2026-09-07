@@ -1,0 +1,214 @@
+{
+  "_meta": {
+    "description": "Static reference data for NEM regions. Context only - not used for modelling.",
+    "generation_mix_period": "2024-25 financial year, approximate",
+    "demand_period": "2024-25 AEMO operational sent-out consumption",
+    "population_period": "ABS ERP, approximate",
+    "notes": [
+      "NEM totals for generation mix and sector split are demand-weighted averages of the five regions.",
+      "City figures are Greater Capital City / significant urban area populations.",
+      "NSW1 includes the ACT. Western Australia and the Northern Territory are not in the NEM.",
+      "Rooftop solar is behind-the-meter and invisible to AEMO dispatch - it reduces operational demand rather than appearing as generation."
+    ]
+  },
+
+  "fuels": [
+    {"key": "coal",          "label": "Coal",          "colour": "#5F5E5A", "renewable": false},
+    {"key": "gas",           "label": "Gas",           "colour": "#BA7517", "renewable": false},
+    {"key": "hydro",         "label": "Hydro",         "colour": "#378ADD", "renewable": true},
+    {"key": "wind",          "label": "Wind",          "colour": "#1D9E75", "renewable": true},
+    {"key": "utility_solar", "label": "Utility solar", "colour": "#EF9F27", "renewable": true},
+    {"key": "rooftop_solar", "label": "Rooftop solar", "colour": "#FAC775", "renewable": true}
+  ],
+
+  "sectors": [
+    {"key": "residential",   "label": "Residential",            "colour": "#7F77DD"},
+    {"key": "commercial",    "label": "Commercial & services",  "colour": "#5DCAA5"},
+    {"key": "manufacturing", "label": "Manufacturing",          "colour": "#D85A30"},
+    {"key": "mining",        "label": "Mining",                 "colour": "#888780"},
+    {"key": "utilities",     "label": "Utilities",              "colour": "#378ADD"},
+    {"key": "transport",     "label": "Transport",              "colour": "#ED93B1"},
+    {"key": "agriculture",   "label": "Agriculture",            "colour": "#97C459"},
+    {"key": "construction",  "label": "Construction",           "colour": "#F0997B"},
+    {"key": "other",         "label": "Other / residual",       "colour": "#B4B2A9"}
+  ],
+
+  "regions": [
+    {
+      "id": "NSW1",
+      "name": "New South Wales",
+      "short": "NSW",
+      "includes": "Australian Capital Territory",
+      "population_m": 8.5,
+      "cities": [
+        {"name": "Sydney",     "population": 5450000},
+        {"name": "Newcastle",  "population": 510000},
+        {"name": "Canberra",   "population": 470000}
+      ],
+      "annual_demand_twh": 63.51,
+      "peak_demand_gw": 12.12,
+      "load_factor": 0.60,
+      "generation_mix_pct": {
+        "coal": 59.6, "gas": 2.1, "hydro": 5.1,
+        "wind": 9.9, "utility_solar": 10.7, "rooftop_solar": 12.6
+      },
+      "renewable_pct": 38.3,
+      "consumption_pct": {
+        "residential": 28, "commercial": 33, "manufacturing": 30, "mining": 1,
+        "utilities": 1, "transport": 1, "agriculture": 1, "construction": 0, "other": 5
+      },
+      "interconnectors": ["QNI", "Terranora", "VIC-NSW", "Project EnergyConnect"],
+      "note": "Largest region. Coal-dominated but retiring - Eraring and Bayswater are the big exits."
+    },
+    {
+      "id": "QLD1",
+      "name": "Queensland",
+      "short": "QLD",
+      "includes": null,
+      "population_m": 5.5,
+      "cities": [
+        {"name": "Brisbane",   "population": 2660000},
+        {"name": "Gold Coast", "population": 720000},
+        {"name": "Townsville", "population": 200000}
+      ],
+      "annual_demand_twh": 51.24,
+      "peak_demand_gw": 10.66,
+      "load_factor": 0.55,
+      "generation_mix_pct": {
+        "coal": 62.2, "gas": 6.7, "hydro": 3.9,
+        "wind": 4.9, "utility_solar": 9.3, "rooftop_solar": 13.0
+      },
+      "renewable_pct": 31.1,
+      "consumption_pct": {
+        "residential": 23, "commercial": 22, "manufacturing": 21, "mining": 30,
+        "utilities": 1, "transport": 1, "agriculture": 1, "construction": 1, "other": 0
+      },
+      "interconnectors": ["QNI", "Terranora"],
+      "note": "Most coal-dependent, and the only region where mining is the largest load."
+    },
+    {
+      "id": "VIC1",
+      "name": "Victoria",
+      "short": "VIC",
+      "includes": null,
+      "population_m": 7.0,
+      "cities": [
+        {"name": "Melbourne", "population": 5210000},
+        {"name": "Geelong",   "population": 290000},
+        {"name": "Ballarat",  "population": 120000}
+      ],
+      "annual_demand_twh": 41.09,
+      "peak_demand_gw": 9.51,
+      "load_factor": 0.49,
+      "generation_mix_pct": {
+        "coal": 55.9, "gas": 2.3, "hydro": 5.0,
+        "wind": 21.9, "utility_solar": 3.7, "rooftop_solar": 11.2
+      },
+      "renewable_pct": 41.8,
+      "consumption_pct": {
+        "residential": 41, "commercial": 31, "manufacturing": 16, "mining": 8,
+        "utilities": 1, "transport": 1, "agriculture": 1, "construction": 1, "other": 0
+      },
+      "interconnectors": ["Heywood", "Murraylink", "Basslink", "VIC-NSW"],
+      "note": "Brown coal plus the strongest wind fleet. Most residential of the five, yet the lowest spike rate."
+    },
+    {
+      "id": "SA1",
+      "name": "South Australia",
+      "short": "SA",
+      "includes": null,
+      "population_m": 1.8,
+      "cities": [
+        {"name": "Adelaide",      "population": 1420000},
+        {"name": "Mount Gambier", "population": 27000},
+        {"name": "Whyalla",       "population": 22000}
+      ],
+      "annual_demand_twh": 11.43,
+      "peak_demand_gw": 3.27,
+      "load_factor": 0.40,
+      "generation_mix_pct": {
+        "coal": 0.0, "gas": 22.4, "hydro": 0.0,
+        "wind": 47.3, "utility_solar": 6.4, "rooftop_solar": 23.9
+      },
+      "renewable_pct": 77.6,
+      "consumption_pct": {
+        "residential": 37, "commercial": 33, "manufacturing": 14, "mining": 3,
+        "utilities": 10, "transport": 1, "agriculture": 1, "construction": 1, "other": 0
+      },
+      "interconnectors": ["Heywood", "Murraylink", "Project EnergyConnect"],
+      "note": "No coal since 2016. Highest renewable share and the lowest load factor - small, peaky, weather-exposed."
+    },
+    {
+      "id": "TAS1",
+      "name": "Tasmania",
+      "short": "TAS",
+      "includes": null,
+      "population_m": 0.57,
+      "cities": [
+        {"name": "Hobart",     "population": 250000},
+        {"name": "Launceston", "population": 90000},
+        {"name": "Devonport",  "population": 30000}
+      ],
+      "annual_demand_twh": 10.03,
+      "peak_demand_gw": 1.59,
+      "load_factor": 0.72,
+      "generation_mix_pct": {
+        "coal": 0.0, "gas": 3.3, "hydro": 71.6,
+        "wind": 20.6, "utility_solar": 0.0, "rooftop_solar": 4.5
+      },
+      "renewable_pct": 96.7,
+      "consumption_pct": {
+        "residential": 20, "commercial": 18, "manufacturing": 55, "mining": 0,
+        "utilities": 0, "transport": 0, "agriculture": 0, "construction": 0, "other": 7
+      },
+      "interconnectors": ["Basslink"],
+      "note": "Hydro and heavy industry. Flattest demand profile in the NEM, but a single interconnector."
+    }
+  ],
+
+  "nem_total": {
+    "id": "NEM",
+    "name": "Total NEM",
+    "population_m": 23.37,
+    "annual_demand_twh": 177.30,
+    "peak_demand_gw": 33.72,
+    "load_factor": 0.60,
+    "generation_mix_pct": {
+      "coal": 52.3, "gas": 4.9, "hydro": 8.2,
+      "wind": 14.3, "utility_solar": 7.8, "rooftop_solar": 12.7
+    },
+    "renewable_pct": 43.0,
+    "consumption_pct": {
+      "residential": 29.6, "commercial": 28.4, "manufacturing": 24.6, "mining": 11.3,
+      "utilities": 1.5, "transport": 0.9, "agriculture": 0.9, "construction": 0.6, "other": 2.2
+    },
+    "note": "Coincident peak is lower than the sum of regional peaks - regions do not peak simultaneously."
+  },
+
+  "interconnectors": [
+    {"name": "QNI",                   "from": "QLD1", "to": "NSW1", "type": "regulated"},
+    {"name": "Terranora",             "from": "QLD1", "to": "NSW1", "type": "market"},
+    {"name": "VIC-NSW",               "from": "VIC1", "to": "NSW1", "type": "regulated"},
+    {"name": "Heywood",               "from": "VIC1", "to": "SA1",  "type": "regulated"},
+    {"name": "Murraylink",            "from": "VIC1", "to": "SA1",  "type": "market"},
+    {"name": "Basslink",              "from": "VIC1", "to": "TAS1", "type": "market"},
+    {"name": "Project EnergyConnect", "from": "NSW1", "to": "SA1",  "type": "regulated"}
+  ],
+
+  "market_facts": {
+    "price_floor_aud_mwh": -1000,
+    "price_cap_aud_mwh": 20300,
+    "cap_note": "Indexed annually each July - check the AER for the current value.",
+    "dispatch_interval_minutes": 5,
+    "intervals_per_day": 288,
+    "trading_day_start": "04:05",
+    "trading_day_end": "04:00",
+    "bid_deadline": "12:30",
+    "bid_price_bands": 10,
+    "predispatch_interval_minutes": 30,
+    "predispatch_runs_per_day": 48,
+    "regions": 5,
+    "operator": "Australian Energy Market Operator (AEMO)",
+    "market_type": "gross pool, energy-only, mandatory spot"
+  }
+}
