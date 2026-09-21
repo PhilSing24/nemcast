@@ -5,14 +5,14 @@ Two scheduled runs, one script:
     python src/daily.py --mode predispatch    # 20:30 — tomorrow's forecast
     python src/daily.py --mode dispatch       # 04:30 — yesterday's outcome
 
-Both append to the parquet tables written by backfill.py, using the same schema and
-the same dedup key, so re-running is harmless. Files already ingested are skipped by
-checking source_file against what is already stored.
+Appends to the year-partitioned parquet tables written by backfill.py, using the
+same schema and dedup key, so re-running is harmless. Files already ingested are
+skipped by checking source_file against the current year's partition.
 
     --lookback N   widen the window to recover after a failed run (default 2 days)
     --dry-run      fetch and report without writing
 
-Exit codes: 0 success, 1 nothing fetched, 2 fetch or write error.
+Exit codes: 0 appended, 1 nothing new, 2 fetch or write error.
 """
 
 import argparse
@@ -24,15 +24,14 @@ from pathlib import Path
 import pandas as pd
 
 import nemweb as nw
-from backfill import (KEEP, REGIONS, REPORT_ALIAS, VINTAGE_KEYS, WAREHOUSE,
-                      add_vintage, stamp, tidy)
+from backfill import (REGIONS, REPORT_ALIAS, TIME_COL, WAREHOUSE, known_at,
+                      read_part, stamp, tidy, write_by_year)
 
 MODES = {
     "dispatch": {
         "tables": ["DISPATCHPRICE", "DISPATCHREGIONSUM"],
         "paths": ["Reports/Current/DispatchIS_Reports",
                   "Reports/Archive/DispatchIS_Reports"],
-        "time_col": "SETTLEMENTDATE",
         # 288 intervals x 5 regions, pricing run only
         "expect_per_day": 1440,
     },
@@ -40,25 +39,23 @@ MODES = {
         "tables": ["PREDISPATCHPRICE", "PREDISPATCHREGIONSUM"],
         "paths": ["Reports/Current/PredispatchIS_Reports",
                   "Reports/Archive/PredispatchIS_Reports"],
-        "time_col": "DATETIME",
         # ~48 runs x ~55 intervals x 5 regions
         "expect_per_day": 13000,
     },
 }
 
 
-def existing(table):
-    """Load the stored table, or an empty frame if it does not exist yet."""
-    path = WAREHOUSE / f"{table.lower()}.parquet"
-    return pd.read_parquet(path) if path.exists() else pd.DataFrame()
-
-
-def already_have(table):
-    """Filenames already ingested, so we do not refetch them."""
-    df = existing(table)
-    if df.empty or "source_file" not in df.columns:
-        return set()
-    return set(df.source_file.dropna().unique())
+def already_have(table, years):
+    """Filenames already ingested, read from the relevant year partitions only."""
+    seen = set()
+    for year in years:
+        p = WAREHOUSE / table.lower() / f"{year}.parquet"
+        if not p.exists():
+            continue
+        df = pd.read_parquet(p, columns=["source_file"])
+        seen |= set(df.source_file.dropna().unique())
+        del df
+    return seen
 
 
 def fetch_window(cfg, start, end, seen):
@@ -106,60 +103,33 @@ def fetch_window(cfg, start, end, seen):
                 table = REPORT_ALIAS.get(table, table)
                 if table not in frames:
                     continue
+                published = df.pop(nw.PUBLISHED) if nw.PUBLISHED in df.columns else None
                 df = tidy(df, table)
                 if len(df):
                     frames[table].append(
-                        stamp(df, tier, pd.Timestamp(ts), name, "file_timestamp"))
+                        stamp(df, tier, known_at(df, published, ts), name,
+                              "file_timestamp"))
 
     print(f"  fetched {fetched}, skipped {skipped} already stored, {failed} failed")
     return ({t: pd.concat(v, ignore_index=True) for t, v in frames.items() if v},
             fetched, failed)
 
 
-def append(table, new, dry_run=False):
-    """Append to the stored table, deduplicating on the shared key."""
-    old = existing(table)
-    combined = add_vintage(pd.concat([old, new], ignore_index=True)
-                           if len(old) else new)
-
-    key = ["REGIONID"]
-    key += ["SETTLEMENTDATE"] if "SETTLEMENTDATE" in combined.columns else ["DATETIME"]
-    if "vintage" in combined.columns:
-        key.append("vintage")
-    if "INTERVENTION" in combined.columns:
-        key.append("INTERVENTION")
-    key.append("source")
-
-    before = len(combined)
-    combined = combined.drop_duplicates(key).sort_values(key).reset_index(drop=True)
-    added = len(combined) - len(old)
-
-    tcol = "SETTLEMENTDATE" if "SETTLEMENTDATE" in combined.columns else "DATETIME"
-    print(f"  {table}: +{added:,} rows "
-          f"({before - len(combined):,} dupes) "
-          f"-> {len(combined):,} total, through {combined[tcol].max():%Y-%m-%d %H:%M}")
-
-    if not dry_run:
-        WAREHOUSE.mkdir(parents=True, exist_ok=True)
-        combined.to_parquet(WAREHOUSE / f"{table.lower()}.parquet", index=False)
-
-    return added
-
-
 def coverage_check(table, cfg, days=3):
     """Warn if recent days look thin — a job that fetches nothing looks like success."""
-    df = existing(table)
+    year = pd.Timestamp.now().year
+    df = read_part(table, year)
     if df.empty:
         return
-    tcol = cfg["time_col"]
-    recent = df[df[tcol] >= pd.Timestamp.now().normalize() - pd.Timedelta(days=days)]
+    tcol = TIME_COL[table]
+    cutoff = pd.Timestamp.now().normalize() - pd.Timedelta(days=days)
+    recent = df[df[tcol] >= cutoff]
     if recent.empty:
         print(f"  WARNING {table}: no rows in the last {days} days")
         return
     counts = recent.groupby(recent[tcol].dt.date).size()
     thin = counts[counts < cfg["expect_per_day"] * 0.8]
-    # The final day is always partial, so ignore it.
-    thin = thin[thin.index < pd.Timestamp.now().date()]
+    thin = thin[thin.index < pd.Timestamp.now().date()]   # today is always partial
     if len(thin):
         print(f"  WARNING {table}: thin days {dict(thin)}")
 
@@ -181,32 +151,35 @@ def main():
     print(f"window {start:%Y-%m-%d} -> {end:%Y-%m-%d}"
           f"{' (dry run)' if args.dry_run else ''}\n")
 
+    years = sorted({start.year, end.year})
     seen = set()
     for table in cfg["tables"]:
-        seen |= already_have(table)
+        seen |= already_have(table, years)
 
     frames, fetched, failed = fetch_window(cfg, start, end, seen)
 
     if not frames:
         print("\nnothing new to append")
-        # Only an error if we also failed to reach the source.
         sys.exit(2 if failed else 0)
 
     print()
-    total = 0
-    for table in cfg["tables"]:
-        if table in frames:
-            total += append(table, frames[table], args.dry_run)
+    if args.dry_run:
+        for table, df in frames.items():
+            print(f"  {table}: would append {len(df):,} rows")
+    else:
+        for table in cfg["tables"]:
+            if table in frames:
+                write_by_year(table, frames[table])
 
-    print()
-    for table in cfg["tables"]:
-        coverage_check(table, cfg)
+        print()
+        for table in cfg["tables"]:
+            coverage_check(table, cfg)
 
     if failed:
         print(f"\n{failed} fetch failures — rerun with a wider --lookback")
         sys.exit(2)
 
-    sys.exit(0 if total else 1)
+    sys.exit(0)
 
 
 if __name__ == "__main__":

@@ -53,6 +53,36 @@ def file_datetime(name):
     return datetime.strptime(m.group(1), "%Y%m%d%H%M") if m else None
 
 
+# Column added to every parsed table, carrying when its source file was published.
+# Callers pop it before writing and use it as known_at.
+PUBLISHED = "_published"
+
+
+def publication_time(name):
+    """When a single report file became available, read from its own name.
+
+    Two naming schemes, and they differ in what the numbers mean:
+
+      PUBLIC_PREDISPATCHIS_202609092330_20260909230155.zip
+          run label 23:30, published 23:01:55 — the trailing 14 digits are
+          the actual publication time, so use them
+
+      PUBLIC_DISPATCHIS_202609092210_0000000536970282.zip
+          interval ending 22:10 — the trailing number is a sequence id, not
+          a time. The file lands a few minutes BEFORE 22:10, so the interval
+          stamp is a slightly late, conservative estimate. Never early.
+
+    Returns None for names without a timestamp, such as archive day bundles.
+    """
+    m = re.search(r"_(\d{14})\.(?:zip|csv)$", name, flags=re.I)
+    if m:
+        return datetime.strptime(m.group(1), "%Y%m%d%H%M%S")
+    m = re.search(r"_(\d{12})(?:_|\.)", name)
+    if m:
+        return datetime.strptime(m.group(1), "%Y%m%d%H%M")
+    return None
+
+
 # ------------------------------------------------------------------ parsing
 
 def parse_mms(text, tables=None):
@@ -89,19 +119,29 @@ def parse_mms(text, tables=None):
     return blocks
 
 
-def read_zip(content, tables=None):
-    """Parse every CSV in a zip, recursing into nested zips (ARCHIVE dailies)."""
+def read_zip(content, tables=None, _outer=None):
+    """Parse every CSV in a zip, recursing into nested zips.
+
+    Each parsed table gets a PUBLISHED column taken from the innermost file
+    that carries a timestamp. That matters for archive day bundles such as
+    PUBLIC_DISPATCHIS_20260919.zip: the bundle's own name only gives a date,
+    and midnight on that date is BEFORE most of the data inside it existed.
+    Stamping rows with it made values look known a day early — leakage.
+    The 288 files inside each carry their own correct times.
+    """
     out = {}
     with zipfile.ZipFile(io.BytesIO(content)) as z:
         for member in z.namelist():
             data = z.read(member)
             if member.lower().endswith(".zip"):
-                inner = read_zip(data, tables)
+                inner = read_zip(data, tables, _outer=member)
                 for k, v in inner.items():
                     out.setdefault(k, []).append(v)
             elif member.upper().endswith((".CSV", ".TXT")):
+                ts = publication_time(member) or publication_time(_outer or "")
                 for k, v in parse_mms(
                         data.decode("utf-8", errors="replace"), tables).items():
+                    v[PUBLISHED] = pd.Timestamp(ts) if ts else pd.NaT
                     out.setdefault(k, []).append(v)
     return {k: pd.concat(v, ignore_index=True) for k, v in out.items()}
 

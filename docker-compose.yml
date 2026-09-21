@@ -1,0 +1,27 @@
+# Two services from one image, sharing the warehouse:
+#   ingest  keeps the parquet current from AEMO, twice a day
+#   api     serves it to CaféBot
+#
+#   cp .env.example .env      # then set NEMCAST_API_KEY
+#   docker compose up -d --build
+#   docker compose logs -f ingest
+
+services:
+  ingest:
+    build: .
+    command: ["python", "api/scheduler.py"]
+    volumes:
+      - ./data/warehouse:/app/data/warehouse
+    restart: unless-stopped
+
+  api:
+    build: .
+    command: ["uvicorn", "api.app:app", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "8000:8000"
+    environment:
+      NEMCAST_API_KEY: ${NEMCAST_API_KEY:?set NEMCAST_API_KEY in .env}
+    volumes:
+      # read-only: only the ingestion job writes to the warehouse
+      - ./data/warehouse:/app/data/warehouse:ro
+    restart: unless-stopped
