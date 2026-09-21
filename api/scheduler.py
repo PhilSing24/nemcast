@@ -30,8 +30,9 @@ SCHEDULE = [
     (20, 30, "predispatch"),
 ]
 
-# daily.py exit codes: 0 appended, 1 nothing new, 2 fetch or write error
-OK = {0, 1}
+# daily.py exits 0 on success, 2 on fetch errors. Python also exits 1 on an
+# unhandled exception, so treating 1 as fine would log crashes as quiet days.
+OK = {0}
 
 logging.basicConfig(
     level=logging.INFO,
@@ -70,18 +71,42 @@ def next_run(now: datetime):
     return min(candidates)
 
 
+POLL_SECONDS = 60
+LATE_MINUTES = 5
+
+
 def main():
     log.info("scheduler up; catching up once before the first scheduled run")
     for _, _, mode in SCHEDULE:
         run(mode)
 
+    when, mode = next_run(datetime.now())
+    log.info("next: %s at %s", mode, when.strftime("%Y-%m-%d %H:%M"))
+
+    # Wake every minute and compare against the wall clock, rather than sleeping
+    # until the next run in one block. A single long sleep counts elapsed time
+    # on a clock that stops while the machine is suspended or the VM is paused:
+    # after a night with the lid closed, it was still waiting at 07:00 for a
+    # 04:30 run.
     while True:
+        time.sleep(POLL_SECONDS)
+        now = datetime.now()
+        if now < when:
+            continue
+
+        if now - when > timedelta(minutes=LATE_MINUTES):
+            # Woke up late — possibly past more than one scheduled run. Run
+            # every mode, as on start-up, so neither the actuals nor the
+            # forecast is left waiting a full day for its next slot.
+            log.warning("woke %.0f min late for %s; catching up all modes",
+                        (now - when).total_seconds() / 60, mode)
+            for _, _, m in SCHEDULE:
+                run(m)
+        else:
+            run(mode)
+
         when, mode = next_run(datetime.now())
-        wait = (when - datetime.now()).total_seconds()
-        log.info("next: %s at %s (in %.1fh)", mode, when.strftime("%Y-%m-%d %H:%M"),
-                 wait / 3600)
-        time.sleep(max(wait, 0))
-        run(mode)
+        log.info("next: %s at %s", mode, when.strftime("%Y-%m-%d %H:%M"))
 
 
 if __name__ == "__main__":

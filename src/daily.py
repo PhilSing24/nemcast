@@ -12,7 +12,8 @@ skipped by checking source_file against the current year's partition.
     --lookback N   widen the window to recover after a failed run (default 2 days)
     --dry-run      fetch and report without writing
 
-Exit codes: 0 appended, 1 nothing new, 2 fetch or write error.
+Exit codes: 0 success (including nothing new), 2 fetch or write error.
+Anything else — 1 in particular — is an unhandled crash.
 """
 
 import argparse

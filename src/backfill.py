@@ -30,6 +30,7 @@ Every row carries provenance:
 
 import argparse
 import gc
+import os
 import re
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -118,7 +119,7 @@ def stamp(df, source, known_at, source_file, kind):
     df["source"] = source
     df["known_at"] = known_at
     df["known_at_kind"] = kind
-    df["ingested_at"] = pd.Timestamp.now(tz="Australia/Brisbane").tz_localize(None)
+    df["ingested_at"] = pd.Timestamp.utcnow().tz_localize(None)
     df["source_file"] = source_file
     return df
 
@@ -222,7 +223,14 @@ def write_part(table, year, df, label=""):
 
     p = part_path(table, year)
     p.parent.mkdir(parents=True, exist_ok=True)
-    combined.to_parquet(p, index=False)
+    # Write beside the target, then swap in with one rename. A rename is atomic,
+    # so the partition is always either the old version or the new one — never
+    # half of each. Writing in place, a process killed mid-write (a laptop lid,
+    # a restart) leaves the only copy unreadable. The temporary name ends in
+    # .tmp so readers globbing *.parquet never pick it up.
+    tmp = p.with_name(p.name + ".tmp")
+    combined.to_parquet(tmp, index=False)
+    os.replace(tmp, p)
 
     print(f"    {table} {year}: +{added:,} -> {len(combined):,} rows"
           f" ({before - len(combined):,} dupes){label}")
