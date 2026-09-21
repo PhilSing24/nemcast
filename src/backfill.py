@@ -118,7 +118,7 @@ def stamp(df, source, known_at, source_file, kind):
     df["source"] = source
     df["known_at"] = known_at
     df["known_at_kind"] = kind
-    df["ingested_at"] = pd.Timestamp.utcnow().tz_localize(None)
+    df["ingested_at"] = pd.Timestamp.now(tz="Australia/Brisbane").tz_localize(None)
     df["source_file"] = source_file
     return df
 
