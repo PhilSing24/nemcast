@@ -8,3 +8,5 @@ docs/*.xlsx
 .vscode/
 !data/reference/
 !data/reference/*
+.env
+src/test.py
