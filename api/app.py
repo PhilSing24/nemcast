@@ -20,7 +20,8 @@ Times are NEM time (AEST, UTC+10, no daylight saving), returned without offset.
 """
 
 import os
-from datetime import date
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 from pathlib import Path
 from typing import Literal, Optional
 
@@ -128,8 +129,11 @@ def tables():
 @app.get("/data/{table}", dependencies=[Depends(require_key)])
 def data(
     table: str,
-    start: date = Query(..., description="first day, inclusive (NEM time)"),
-    end: date = Query(..., description="last day, exclusive"),
+    start: Optional[date] = Query(None, description="first day, inclusive (NEM time)"),
+    end: Optional[date] = Query(None, description="last day, exclusive"),
+    days: Optional[int] = Query(None, ge=1, le=31,
+                                description="instead of start/end: the last N days "
+                                            "up to the latest forecast"),
     region: Optional[str] = Query(None, description="NSW1, QLD1, VIC1, SA1 or TAS1"),
     limit: int = Query(10000, ge=1, le=MAX_LIMIT),
     offset: int = Query(0, ge=0),
@@ -140,6 +144,14 @@ def data(
     Results are in a stable order, so paging with limit and offset is safe.
     A full page means there may be more: call again with the next offset.
     """
+    # A relative window lets one fixed request work every day, for connectors
+    # that cannot compute dates. The end reaches three days ahead because
+    # pre-dispatch forecasts run up to two days past today.
+    if days is not None:
+        today = datetime.now(ZoneInfo("Australia/Brisbane")).date()
+        start, end = today - timedelta(days=days), today + timedelta(days=3)
+    elif start is None or end is None:
+        raise HTTPException(400, "give either start and end, or days")
     if end <= start:
         raise HTTPException(400, "end must be after start")
 
